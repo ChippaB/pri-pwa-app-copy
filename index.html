@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <meta name="theme-color" content="#f3f4f6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Polytechnic Serial Number Scan Log</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #072549; --accent: #2563eb;
+      --bg-primary: #f3f4f6; --bg-card: #ffffff; --border: #d1d5db;
+      --text-primary: #111827; --text-muted: #6b7280;
+      --success: #10b981; --warning: #f59e0b; --error: #ef4444;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background: var(--bg-primary); 
+      color: var(--text-primary); 
+      min-height: 100vh; 
+      position: relative;
+      overflow-x: hidden;
+    }
+    
+    .wrap { 
+      width: 100%; 
+      max-width: 600px;
+      margin: 0 auto; 
+      padding: 8px; 
+      padding-top: 4px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0 8px 0;
+    }
+    .status-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+    }
+    #batteryStatus { background: #6b7280; }
+    #netStatus { background: var(--success); }
+    
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; margin: 6px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    label { 
+      display: block; 
+      font-size: 11px; 
+      font-weight: 600; 
+      margin-bottom: 6px; 
+      color: var(--text-muted); 
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    input, select, button, textarea {
+      width: 100%; padding: 10px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg-card);
+      color: var(--text-primary); font-size: 15px; font-family: inherit;
+    }
+    input, select { height: 44px; }
+    
+    button { 
+      background: var(--accent); 
+      color: white; 
+      font-weight: 600; 
+      border: 0; 
+      cursor: pointer; 
+      height: 44px;
+      min-height: 44px;
+      transition: all 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    button:active { transform: scale(0.98); }
+    
+    .btn-compact {
+      width: auto;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 40px;
+      min-height: 40px;
+      font-size: 14px;
+    }
+    
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .scan-field-wrapper { position: relative; }
+    
+    .scan-field { 
+      font-size: 18px; 
+      font-weight: 600; 
+      padding-right: 40px;
+      transition: all 0.2s;
+      border: 2px solid var(--border);
+    }
+    .scan-field:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.3);
+      background: #f0f7ff;
+    }
+    
+    .clear-btn {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: var(--text-muted); color: white; border-radius: 50%;
+      width: 22px; height: 22px; padding: 0; font-size: 13px; 
+      display: none; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    
+    .status {
+      padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: 700;
+      display: none; align-items: center; gap: 8px;
+      font-size: 14px;
+    }
+    .status.show { display: flex; }
+    .ok { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid var(--success); }
+    .dup { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid var(--warning); }
+    .err { background: rgba(239, 68, 68, 0.15); color: var(--error); border: 1px solid var(--error); }
+    .queued { background: rgba(37, 99, 235, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+    
+    .last-scan-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px 0;
+    }
+    .last-scan-preview .scan-data-col {
+      flex: 1 1 auto;
+      min-width: 80px;
+    }
+    .last-scan-preview .scan-data-col:nth-child(1),
+    .last-scan-preview .scan-data-col:nth-child(2) {
+      flex: 1 1 45%;
+    }
+    .last-scan-preview .scan-data-col:nth-child(3) {
+      flex: 0 0 auto;
+    }
+    
+    .history-item {
+      display: flex; align-items: center;
+      padding: 10px 12px; margin: 6px 0; background: var(--bg-card);
+      border-radius: 8px; border-left: 4px solid var(--accent);
+      border: 1px solid var(--border); border-left-width: 4px;
+      position: relative;
+      gap: 10px;
+    }
+    .scan-data-col { flex: 1; min-width: 0; text-align: left; }
+    
+    .data-label { 
+      font-size: 10px; 
+      font-weight: 700; 
+      color: var(--text-muted); 
+      margin-bottom: 3px; 
+      text-transform: uppercase; 
+      letter-spacing: 0.5px; 
+    }
+    
+    .last-scan-part, .last-scan-serial { 
+      font-weight: 700; 
+      color: var(--text-primary);
+      word-break: break-word;
+      overflow-wrap: break-word;
+      font-size: clamp(16px, 4.5vw, 24px);
+    }
+    .last-scan-serial {
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+    
+    .history-part-num { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .history-serial-num { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+    
+    .history-status { 
+      display: inline-block;
+      font-weight: 700; font-size: 12px; text-transform: uppercase; 
+      padding: 3px 10px; border-radius: 10px;
+      background: #f3f4f6; color: var(--text-muted);
+    }
+    #lastScanStatus { font-size: 13px; padding: 5px 12px; }
+    .history-time { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+    
+    .history-panel { margin-top: 10px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .history-panel.expanded { max-height: 350px; overflow-y: auto; }
+    .history-toggle { 
+      background: transparent; 
+      border: 1px solid var(--border); 
+      color: var(--text-muted); 
+      margin-top: 6px;
+      height: 40px;
+      font-size: 14px;
+    }
+    .history-toggle:hover { background: var(--bg-card); color: var(--text-primary); }
+    
+    .history-edit-btn {
+      background: transparent; color: var(--text-muted); border: none; 
+      font-size: 16px; padding: 6px; cursor: pointer; height: auto; width: auto;
+      margin-left: 6px;
+    }
+    .history-edit-btn:hover { color: var(--accent); background: rgba(37, 99, 235, 0.1); border-radius: 50%; }
+
+    .footer { 
+      text-align: center; 
+      padding: 8px 0 12px 0; 
+      color: var(--text-muted); 
+      font-size: 10px; 
+    }
+
+    .modal-overlay {
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%;
+      background: rgba(0,0,0,0.5); 
+      display: none; 
+      justify-content: center; 
+      align-items: center; 
+      z-index: 100;
+      backdrop-filter: blur(2px);
+    }
+    .modal {
+      background: var(--bg-card); 
+      width: 90%; 
+      max-width: 400px;
+      padding: 20px; 
+      border-radius: 10px; 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal h3 { margin-bottom: 14px; font-size: 16px; color: var(--text-primary); }
+    .modal textarea { width: 100%; height: 80px; resize: vertical; margin-bottom: 14px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-save { background: var(--accent); color: white; }
+    
+    .helper-text {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      line-height: 1.3;
+    }
+    
+    #dimOverlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: black;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+    
+    .batch-btn-row {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-start;
+    }
+    .batch-btn-row button {
+      width: auto;
+      padding: 0 16px;
+      flex: 0 0 auto;
+    }
+    
+    #offlineWarning {
+      display: none;
+      background: var(--error);
+      color: white;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-weight: 700;
+      text-align: center;
+      font-size: 13px;
+    }
+    #offlineWarning.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="header-bar">
+    <div id="batteryStatus" class="status-badge">🔋 ---%</div>
+    <div id="netStatus" class="status-badge">ONLINE</div>
+  </div>
+  
+  <div id="offlineWarning">
+    ⚠️ OFFLINE - Swipe down to refresh and reconnect
+  </div>
+
+  <div class="card">
+    <div class="row" id="operatorStationRow">
+      <div>
+        <label>Operator Name</label>
+        <select id="operator">
+          <option value="" disabled selected>Select Operator</option>
+          <option>Grace</option><option>Debbie</option><option>Evis</option><option>Laura</option>
+          <option>Mercedes</option><option>Brenda</option><option>Amanda</option>
+          <option>Sarah</option><option>Faye</option><option>Karisha</option>
+          <option>Maria G</option><option>Kiara</option><option>Maria L</option><option>Kathy</option>
+          <option>Althea</option><option>Stephanie</option><option>Chip (TESTING)</option>
+        </select>
+      </div>
+      <div>
+        <label>Station</label>
+        <select id="station">
+          <option value="MAIN">MAIN</option>
+          <option>OP1</option><option>OP2</option><option>OP3</option><option>OP4</option>
+          <option>OP5</option><option>OP6</option><option>OP7</option><option>OP8</option>
+          <option>OP9</option><option>OP10</option><option>OP11</option><option>OP12</option>
+          <option>OP13</option><option>OP14</option><option>OP15</option><option>OP16</option>
+          <option>OP17</option><option>OP18</option><option>OP19</option><option>OP20</option><option>Testing</option>
+        </select>
+      </div>
+    </div>
+    
+    <div style="margin-top: 12px;">
+      <button id="lockBtn" class="btn-compact" style="background: var(--success);">
+        🔒 Lock My Info
+      </button>
+      <button id="unlockBtn" class="btn-compact" style="display: none; background: var(--warning);">
+        🔓 Unlock to Change
+      </button>
+    </div>
+  </div>
+
+  <div class="card" id="scanCard">
+    <label>Scan Barcode Here</label>
+    <div class="scan-field-wrapper">
+      <input id="scan" class="scan-field" placeholder="Focus here and scan" autocomplete="off" autofocus inputmode="none">
+      <button class="clear-btn" id="clearBtn" type="button">×</button>
+    </div>
+    <div class="helper-text">Scanner should auto-submit on Enter key</div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <label>Batch Comment (Applies to all scans)</label>
+    <div class="helper-text" style="margin-bottom: 10px;">
+      Stays active until cleared. Use for notes about multiple items (e.g., "Damaged Box", "Return").
+    </div>
+    
+    <div style="margin-bottom: 8px;">
+      <input id="generalNote" placeholder="e.g. Damaged Box, Return, QC Hold..." autocomplete="off">
+    </div>
+    
+    <div class="batch-btn-row">
+      <button id="lockBatchBtn" class="btn-compact" style="background: var(--success);">
+        🔒 Lock Comment
+      </button>
+      <button id="clearNoteBtn" class="btn-compact" style="background: var(--text-muted);">
+        Clear
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Last Scan</label>
+    <div class="last-scan-preview" id="lastScanPreview">
+      <div class="scan-data-col">
+        <div class="data-label">Part Number</div>
+        <div class="last-scan-part" id="lastPart">—</div>
+      </div>
+      <div class="scan-data-col">
+        <div class="data-label">Serial Number</div>
+        <div class="last-scan-serial" id="lastSerial">—</div>
+      </div>
+      <div class="scan-data-col">
+        <div class="data-label">Status</div>
+        <div class="history-status" id="lastScanStatus"></div>
+      </div>
+    </div>
+    <!-- Timestamp row -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+      <div id="lastScanTime" style="font-size: 12px; color: var(--text-muted);"></div>
+      <div id="lastScanRelative" style="font-size: 13px; font-weight: 600; color: var(--accent);"></div>
+    </div>
+    <div id="queueInfo" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <button class="history-toggle" id="historyToggle">📋 View Scan History</button>
+    <div class="helper-text" style="margin-top: 8px;">
+      Click the ✎ pencil icon to add a correction note to any scan
+    </div>
+    <div class="history-panel" id="historyPanel"></div>
+  </div>
+
+    <div class="footer">
+    © 2025 Polytechnic Resources, Inc. | v8.4.0
+  </div>
+</div>
+
+<div class="modal-overlay" id="correctionModal">
+  <div class="modal">
+    <h3>✎ Add Correction Note</h3>
+    <div class="helper-text" style="margin-bottom: 12px;" id="modalContext"></div>
+    <textarea id="correctionText" placeholder="Example: Wrong operator, should be Brenda"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelCorrection">Cancel</button>
+      <button class="btn-save" id="saveCorrection">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<div id="dimOverlay"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
