@@ -176,6 +176,7 @@ function parsePN_SN(s) {
   if (raw.startsWith('01')) {
       const prefix = raw.substring(0, 16);
       let part = PART_NUMBER_MAP[prefix];
+      console.log(`🔍 Map lookup: ${prefix} → ${part || 'NOT FOUND'}`);
       let remainder = raw.substring(16);
       let serial = '';
 
@@ -189,7 +190,7 @@ function parsePN_SN(s) {
         serial = remainder;
       }
 
-      if (serial) {
+      if (!part && serial) {
           const pfrMatch = serial.match(/^(PFR[A-Z0-9]{3,10})/i); 
           if (pfrMatch) {
               const identifiedPartId = pfrMatch[1].toUpperCase();
@@ -978,43 +979,6 @@ async function requestWakeLock() {
   } catch (err) {}
 }
 requestWakeLock();
-
-// SCREEN DIMMER
-let dimTimer;
-let isDimmed = false;
-
-function simpleDim() {
-  if (!isDimmed) {
-    const overlay = document.getElementById('dimOverlay');
-    if (overlay) overlay.style.opacity = '0.85';
-    isDimmed = true;
-  }
-}
-
-function simpleBrighten() {
-  if (isDimmed) {
-    const overlay = document.getElementById('dimOverlay');
-    if (overlay) overlay.style.opacity = '0';
-    isDimmed = false;
-  }
-  resetDimTimer();
-}
-
-function resetDimTimer() {
-  clearTimeout(dimTimer);
-  dimTimer = setTimeout(simpleDim, 60000);
-}
-
-['mousedown', 'touchstart', 'keypress'].forEach(event => {
-  document.addEventListener(event, simpleBrighten, true);
-});
-
-window.addEventListener('click', simpleBrighten);
-window.addEventListener('keydown', simpleBrighten);
-window.addEventListener('touchstart', simpleBrighten);
-
-// === INITIALIZATION ===
-resetDimTimer();
 
 // Call the new async initializer function at the end of your file
 initApp();
