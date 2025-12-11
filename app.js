@@ -1,4 +1,5 @@
-// ===== SeeScan v8.4.3 - Smart Check Digit Detection =====
+// ===== SeeScan v8.5.0 - Dynamic Operator/Station Management =====
+// v8.5.0: Operators and Stations now managed via Google Sheet CONFIG tab - clients can add/remove without code updates
 // v8.4.3: Fixed edge case where serials without end caps had last digit incorrectly stripped - now uses trailing digit count (6+ = check digit, ≤5 = keep all)
 // v8.4.0: Migrated Part Number Map to Google Sheet PART_MAP tab with enhanced logging
 // v8.3.8: Multi-Tablet Fix
@@ -15,15 +16,17 @@ const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyZio2iE1piL2hczpUgDx2
 const SHARED_SECRET = 'qk92X3vE7LrT8c59H1zUM4Bn0ySDFwGp';
 
 let PART_NUMBER_MAP = {};
+let OPERATORS_LIST = [];
+let STATIONS_LIST = [];
 
 /**
- * Fetches the Part Number Map from the Google Sheet via the Apps Script doGet endpoint.
- * Returns a Promise that resolves once the map is successfully loaded.
+ * Fetches the Part Number Map, Operators, and Stations from the Google Sheet via the Apps Script doGet endpoint.
+ * Returns a Promise that resolves once all data is successfully loaded.
  * Enhanced with detailed logging to help diagnose any loading issues.
  */
 async function fetchPartNumberMap() {
   try {
-    console.log('🔄 Fetching Part Number Map from Google Sheet...');
+    console.log('🔄 Fetching Part Number Map and Config from Google Sheet...');
     const res = await fetch(ENDPOINT + '?getMap=true', {
       method: 'GET',
       cache: 'no-cache'
@@ -36,26 +39,121 @@ async function fetchPartNumberMap() {
 
     const data = await res.json();
 
-    if (data.status === 'OK' && data.part_map) {
-      PART_NUMBER_MAP = data.part_map;
-      const mapSize = Object.keys(PART_NUMBER_MAP).length;
-      console.log(`✅ Part Number Map loaded successfully: ${mapSize} entries`);
+    if (data.status === 'OK') {
+      // Load Part Number Map
+      if (data.part_map) {
+        PART_NUMBER_MAP = data.part_map;
+        const mapSize = Object.keys(PART_NUMBER_MAP).length;
+        console.log(`✅ Part Number Map loaded successfully: ${mapSize} entries`);
 
-      // Log first 3 entries for verification (helpful for debugging)
-      if (mapSize > 0) {
-        const sampleEntries = Object.entries(PART_NUMBER_MAP).slice(0, 3);
-        console.log('📋 Sample entries:', sampleEntries);
+        // Log first 3 entries for verification (helpful for debugging)
+        if (mapSize > 0) {
+          const sampleEntries = Object.entries(PART_NUMBER_MAP).slice(0, 3);
+          console.log('📋 Sample entries:', sampleEntries);
+        } else {
+          console.warn('⚠️ Part Number Map is empty. Check PART_MAP sheet in Google Sheets.');
+        }
+      }
+
+      // Load Operators
+      if (data.operators && Array.isArray(data.operators)) {
+        OPERATORS_LIST = data.operators;
+        console.log(`✅ Operators loaded: ${OPERATORS_LIST.length} entries`);
       } else {
-        console.warn('⚠️ Part Number Map is empty. Check PART_MAP sheet in Google Sheets.');
+        console.warn('⚠️ No operators data received. Using hardcoded fallback.');
+      }
+
+      // Load Stations
+      if (data.stations && Array.isArray(data.stations)) {
+        STATIONS_LIST = data.stations;
+        console.log(`✅ Stations loaded: ${STATIONS_LIST.length} entries`);
+      } else {
+        console.warn('⚠️ No stations data received. Using hardcoded fallback.');
       }
     } else {
-      console.error('❌ Failed to fetch part map from server. Response:', data);
-      console.warn('⚠️ App will continue with empty map. GS1-128 barcodes may show as UNKNOWN.');
+      console.error('❌ Failed to fetch data from server. Response:', data);
+      console.warn('⚠️ App will continue with fallback values.');
     }
   } catch (error) {
-    console.error('❌ Network error during part map fetch:', error);
-    console.warn('⚠️ App will continue with empty map. Check internet connection.');
+    console.error('❌ Network error during config fetch:', error);
+    console.warn('⚠️ App will continue with fallback values. Check internet connection.');
   }
+}
+
+/**
+ * Populates the operator dropdown with values from Google Sheet or hardcoded fallback.
+ * Preserves the currently selected value if it exists in the new list.
+ */
+function populateOperators() {
+  const operatorSelect = $('#operator');
+  if (!operatorSelect) return;
+
+  // Fallback list if Google Sheet data is not available
+  const fallbackOperators = [
+    'Grace', 'Debbie', 'Evis', 'Laura', 'Mercedes', 'Brenda', 'Amanda',
+    'Sarah', 'Faye', 'Karisha', 'Maria G', 'Kiara', 'Maria L', 'Kathy',
+    'Althea', 'Stephanie', 'Chip (TESTING)'
+  ];
+
+  const operatorsList = OPERATORS_LIST.length > 0 ? OPERATORS_LIST : fallbackOperators;
+  const currentValue = operatorSelect.value;
+
+  // Clear existing options except the placeholder
+  operatorSelect.innerHTML = '<option value="" disabled selected>Select Operator</option>';
+
+  // Populate with new options
+  operatorsList.forEach(op => {
+    const option = document.createElement('option');
+    option.value = op;
+    option.textContent = op;
+    operatorSelect.appendChild(option);
+  });
+
+  // Restore previous selection if it still exists
+  if (currentValue && operatorsList.includes(currentValue)) {
+    operatorSelect.value = currentValue;
+  }
+
+  console.log(`📝 Operator dropdown populated with ${operatorsList.length} entries`);
+}
+
+/**
+ * Populates the station dropdown with values from Google Sheet or hardcoded fallback.
+ * Preserves the currently selected value if it exists in the new list.
+ */
+function populateStations() {
+  const stationSelect = $('#station');
+  if (!stationSelect) return;
+
+  // Fallback list if Google Sheet data is not available
+  const fallbackStations = [
+    'MAIN', 'OP1', 'OP2', 'OP3', 'OP4', 'OP5', 'OP6', 'OP7', 'OP8',
+    'OP9', 'OP10', 'OP11', 'OP12', 'OP13', 'OP14', 'OP15', 'OP16',
+    'OP17', 'OP18', 'OP19', 'OP20', 'Testing'
+  ];
+
+  const stationsList = STATIONS_LIST.length > 0 ? STATIONS_LIST : fallbackStations;
+  const currentValue = stationSelect.value;
+
+  // Clear existing options
+  stationSelect.innerHTML = '';
+
+  // Populate with new options
+  stationsList.forEach(station => {
+    const option = document.createElement('option');
+    option.value = station;
+    option.textContent = station;
+    stationSelect.appendChild(option);
+  });
+
+  // Restore previous selection if it still exists, otherwise default to MAIN
+  if (currentValue && stationsList.includes(currentValue)) {
+    stationSelect.value = currentValue;
+  } else {
+    stationSelect.value = 'MAIN';
+  }
+
+  console.log(`📝 Station dropdown populated with ${stationsList.length} entries`);
 }
 
 // ===== DATE/TIME FORMATTING HELPERS =====
@@ -904,20 +1002,29 @@ $('#generalNote').addEventListener('click', () => {
 });
 
 // Init
-// We wrap the init sequence in an async function to wait for the map to load.
+// We wrap the init sequence in an async function to wait for the map and config to load.
 async function initApp() {
   // Load local preferences/data first
   loadPrefs();
   loadBatchComment();
   loadLastScan();
   updateLock();
-  
-  // CRITICAL: Await the map fetch before doing anything else that relies on the map.
-  await fetchPartNumberMap(); 
-  
+
+  // CRITICAL: Await the map and config fetch before populating dropdowns
+  await fetchPartNumberMap();
+
+  // Populate operator and station dropdowns from Google Sheet or fallback
+  populateOperators();
+  populateStations();
+
+  // Restore saved selections after population
+  loadPrefs();
+
   // You can now safely assume PART_NUMBER_MAP is loaded (or empty with a log message)
-  console.log('✅ Application Initialized. Map is ready.');
-  console.log(`📊 Part Number Map Status: ${Object.keys(PART_NUMBER_MAP).length} entries loaded`);
+  console.log('✅ Application Initialized. Config loaded.');
+  console.log(`📊 Part Number Map: ${Object.keys(PART_NUMBER_MAP).length} entries`);
+  console.log(`📊 Operators: ${OPERATORS_LIST.length > 0 ? OPERATORS_LIST.length : 'Using fallback'}`);
+  console.log(`📊 Stations: ${STATIONS_LIST.length > 0 ? STATIONS_LIST.length : 'Using fallback'}`);
 }
 
 document.body.addEventListener('touchstart', unlockAudioOnFirstTap);
