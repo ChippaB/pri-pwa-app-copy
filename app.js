@@ -1,4 +1,5 @@
-// ===== SeeScan v8.4.0 - Google Sheet Part Number Map Integration =====
+// ===== SeeScan v8.4.3 - Smart Check Digit Detection =====
+// v8.4.3: Fixed edge case where serials without end caps had last digit incorrectly stripped - now uses trailing digit count (6+ = check digit, ≤5 = keep all)
 // v8.4.0: Migrated Part Number Map to Google Sheet PART_MAP tab with enhanced logging
 // v8.3.8: Multi-Tablet Fix
 // v8.3.4: Fix UNKNOWN Part Number Map errors
@@ -221,9 +222,20 @@ function parsePN_SN(s) {
 
     if (sNum.endsWith('/')) {
       sNum = sNum.substring(0, sNum.length - 1);
+    } else if (/[A-Z\-\.\$\+\%]$/i.test(sNum)) {
+      // Strip if ends with letter or symbol (-, ., $, +, %)
+      sNum = sNum.substring(0, sNum.length - 1);
     } else if (sNum.match(/\d$/)) {
-      if (p !== 'P5556100') {
-        sNum = sNum.substring(0, sNum.length - 1);
+      // Ends with digit - check if it's a check digit based on trailing digit count
+      // Extract trailing numeric portion
+      const trailingDigitsMatch = sNum.match(/(\d+)$/);
+      if (trailingDigitsMatch) {
+        const trailingDigits = trailingDigitsMatch[1];
+        // If 6+ digits at end, strip last digit (it's a check digit)
+        // If ≤5 digits, keep them all (part of actual serial number)
+        if (trailingDigits.length >= 6 && p !== 'P5556100') {
+          sNum = sNum.substring(0, sNum.length - 1);
+        }
       }
     }
 
