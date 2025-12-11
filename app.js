@@ -21,47 +21,40 @@ let PART_NUMBER_MAP = {};
  * Enhanced with detailed logging to help diagnose any loading issues.
  */
 async function fetchPartNumberMap() {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log('🔄 Fetching Part Number Map from Google Sheet...');
-      const res = await fetch(ENDPOINT + '?getMap=true', { 
-        method: 'GET', 
-        cache: 'no-cache' 
-      });
-      
-      if (!res.ok) {
-        console.error('❌ Server returned error status:', res.status, res.statusText);
-        resolve(); // Resolve anyway to prevent app hang
-        return;
-      }
-      
-      const data = await res.json();
-      
-      if (data.status === 'OK' && data.part_map) {
-        PART_NUMBER_MAP = data.part_map;
-        const mapSize = Object.keys(PART_NUMBER_MAP).length;
-        console.log(`✅ Part Number Map loaded successfully: ${mapSize} entries`);
-        
-        // Log first 3 entries for verification (helpful for debugging)
-        if (mapSize > 0) {
-          const sampleEntries = Object.entries(PART_NUMBER_MAP).slice(0, 3);
-          console.log('📋 Sample entries:', sampleEntries);
-        } else {
-          console.warn('⚠️ Part Number Map is empty. Check PART_MAP sheet in Google Sheets.');
-        }
-        
-        resolve(); // Map is ready!
-      } else {
-        console.error('❌ Failed to fetch part map from server. Response:', data);
-        console.warn('⚠️ App will continue with empty map. GS1-128 barcodes may show as UNKNOWN.');
-        resolve(); // Resolve anyway to prevent app hang
-      }
-    } catch (error) {
-      console.error('❌ Network error during part map fetch:', error);
-      console.warn('⚠️ App will continue with empty map. Check internet connection.');
-      resolve(); // Resolve to prevent app hang
+  try {
+    console.log('🔄 Fetching Part Number Map from Google Sheet...');
+    const res = await fetch(ENDPOINT + '?getMap=true', {
+      method: 'GET',
+      cache: 'no-cache'
+    });
+
+    if (!res.ok) {
+      console.error('❌ Server returned error status:', res.status, res.statusText);
+      return;
     }
-  });
+
+    const data = await res.json();
+
+    if (data.status === 'OK' && data.part_map) {
+      PART_NUMBER_MAP = data.part_map;
+      const mapSize = Object.keys(PART_NUMBER_MAP).length;
+      console.log(`✅ Part Number Map loaded successfully: ${mapSize} entries`);
+
+      // Log first 3 entries for verification (helpful for debugging)
+      if (mapSize > 0) {
+        const sampleEntries = Object.entries(PART_NUMBER_MAP).slice(0, 3);
+        console.log('📋 Sample entries:', sampleEntries);
+      } else {
+        console.warn('⚠️ Part Number Map is empty. Check PART_MAP sheet in Google Sheets.');
+      }
+    } else {
+      console.error('❌ Failed to fetch part map from server. Response:', data);
+      console.warn('⚠️ App will continue with empty map. GS1-128 barcodes may show as UNKNOWN.');
+    }
+  } catch (error) {
+    console.error('❌ Network error during part map fetch:', error);
+    console.warn('⚠️ App will continue with empty map. Check internet connection.');
+  }
 }
 
 // ===== DATE/TIME FORMATTING HELPERS =====
@@ -98,7 +91,10 @@ function getRelativeTime(date) {
 }
 
 // ===== HELPERS =====
+let audioUnlocked = false;
 function unlockAudioOnFirstTap() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
   initAudio();
   document.body.removeEventListener('touchstart', unlockAudioOnFirstTap);
 }
@@ -107,7 +103,7 @@ function unlockAudioOnFirstTap() {
 const $ = s => document.querySelector(s);
 const statusBox = $('#status'), lastSerial = $('#lastSerial'), lastPart = $('#lastPart');
 const scanInput = $('#scan'), operatorInput = $('#operator'), stationSel = $('#station');
-const queueInfo = $('#queueInfo'), clearBtn = $('#clearBtn');
+const clearBtn = $('#clearBtn');
 const historyToggle = $('#historyToggle'), historyPanel = $('#historyPanel');
 const lastScanStatus = $('#lastScanStatus');
 const lastScanTime = $('#lastScanTime');
@@ -162,7 +158,8 @@ function playSoundError() {
 }
 
 function show(msg, cls) {
-  statusBox.innerHTML = msg; statusBox.className = 'status show ' + cls;
+  statusBox.textContent = msg;
+  statusBox.className = 'status show ' + cls;
   setTimeout(() => statusBox.classList.remove('show'), 2500);
 }
 
@@ -247,11 +244,6 @@ function cleanSerialClient(rawSerial) {
   return cleaned.trim();
 }
 
-function checkLocalDuplicate(serial) {
-  const h = getHistory();
-  return h.some(item => item.serial === serial && item.status !== 'ERR' && item.status !== 'ERROR');
-}
-
 function getLastScanKey() { 
   const op = operatorInput.value.trim() || 'UNNAMED';
   const st = stationSel.value || 'MAIN';
@@ -309,22 +301,23 @@ function loadLastScan() {
 }
 
 // Update relative time every 30 seconds
-setInterval(() => {
-  const key = getLastScanKey();
-  const stored = localStorage.getItem(key);
-  if (stored && lastScanRelative) {
-    try {
-      const data = JSON.parse(stored);
-      if (data.timestamp) {
-        lastScanRelative.textContent = getRelativeTime(data.timestamp);
-      }
-    } catch (e) {}
-  }
-}, 30000);
-
-function renderQueue() {
-  queueInfo.innerHTML = '';
+let relativeTimeInterval;
+function startRelativeTimeUpdates() {
+  if (relativeTimeInterval) clearInterval(relativeTimeInterval);
+  relativeTimeInterval = setInterval(() => {
+    const key = getLastScanKey();
+    const stored = localStorage.getItem(key);
+    if (stored && lastScanRelative) {
+      try {
+        const data = JSON.parse(stored);
+        if (data.timestamp) {
+          lastScanRelative.textContent = getRelativeTime(data.timestamp);
+        }
+      } catch (e) {}
+    }
+  }, 30000);
 }
+startRelativeTimeUpdates();
 
 function getHistoryKey() { return `history_${operatorInput.value.trim() || 'UNNAMED'}`; }
 
@@ -406,7 +399,6 @@ function renderHistory() {
 // ===== CONNECTIVITY - SIMPLIFIED FOR MULTI-TABLET =====
 // Trust navigator.onLine as primary indicator
 // Only verify server on actual scan attempts
-let isServerReachable = navigator.onLine;
 let consecutiveFailures = 0;
 const MAX_FAILURES_BEFORE_OFFLINE = 3;
 
@@ -416,7 +408,6 @@ function updateNetworkStatus(online) {
   
   if (online) {
     consecutiveFailures = 0;
-    isServerReachable = true;
     if (net) {
       net.textContent = 'ONLINE';
       net.style.background = '#10b981';
@@ -439,7 +430,6 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => {
   console.log('Browser reports offline');
-  isServerReachable = false;
   updateNetworkStatus(false);
 });
 
@@ -507,7 +497,6 @@ async function send(payload, retryCount = 0) {
 
     // Success - we're definitely online
     consecutiveFailures = 0;
-    isServerReachable = true;
     updateNetworkStatus(true);
 
     return data.status || 'ERROR';
@@ -523,7 +512,6 @@ async function send(payload, retryCount = 0) {
     // Only mark offline after multiple consecutive failures
     consecutiveFailures++;
     if (consecutiveFailures >= MAX_FAILURES_BEFORE_OFFLINE) {
-      isServerReachable = false;
       updateNetworkStatus(false);
     }
     return 'OFFLINE';
@@ -908,9 +896,8 @@ $('#generalNote').addEventListener('click', () => {
 async function initApp() {
   // Load local preferences/data first
   loadPrefs();
-  loadBatchComment();  
+  loadBatchComment();
   loadLastScan();
-  renderQueue(); 
   updateLock();
   
   // CRITICAL: Await the map fetch before doing anything else that relies on the map.
