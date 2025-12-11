@@ -1,4 +1,5 @@
-// ===== SeeScan v8.5.0 - Dynamic Operator/Station Management =====
+// ===== SeeScan v8.5.1 - Smart Loading Protection =====
+// v8.5.1: Scan field now locked until Part Number Map loads - prevents UNKNOWN entries from premature scanning
 // v8.5.0: Operators and Stations now managed via Google Sheet CONFIG tab - clients can add/remove without code updates
 // v8.4.3: Fixed edge case where serials without end caps had last digit incorrectly stripped - now uses trailing digit count (6+ = check digit, ≤5 = keep all)
 // v8.4.0: Migrated Part Number Map to Google Sheet PART_MAP tab with enhanced logging
@@ -21,7 +22,7 @@ let STATIONS_LIST = [];
 
 /**
  * Fetches the Part Number Map, Operators, and Stations from the Google Sheet via the Apps Script doGet endpoint.
- * Returns a Promise that resolves once all data is successfully loaded.
+ * Returns a Promise that resolves with true if map loaded successfully, false otherwise.
  * Enhanced with detailed logging to help diagnose any loading issues.
  */
 async function fetchPartNumberMap() {
@@ -34,12 +35,14 @@ async function fetchPartNumberMap() {
 
     if (!res.ok) {
       console.error('❌ Server returned error status:', res.status, res.statusText);
-      return;
+      return false;
     }
 
     const data = await res.json();
 
     if (data.status === 'OK') {
+      let mapLoaded = false;
+
       // Load Part Number Map
       if (data.part_map) {
         PART_NUMBER_MAP = data.part_map;
@@ -50,6 +53,7 @@ async function fetchPartNumberMap() {
         if (mapSize > 0) {
           const sampleEntries = Object.entries(PART_NUMBER_MAP).slice(0, 3);
           console.log('📋 Sample entries:', sampleEntries);
+          mapLoaded = true;
         } else {
           console.warn('⚠️ Part Number Map is empty. Check PART_MAP sheet in Google Sheets.');
         }
@@ -70,13 +74,17 @@ async function fetchPartNumberMap() {
       } else {
         console.warn('⚠️ No stations data received. Using hardcoded fallback.');
       }
+
+      return mapLoaded;
     } else {
       console.error('❌ Failed to fetch data from server. Response:', data);
       console.warn('⚠️ App will continue with fallback values.');
+      return false;
     }
   } catch (error) {
     console.error('❌ Network error during config fetch:', error);
     console.warn('⚠️ App will continue with fallback values. Check internet connection.');
+    return false;
   }
 }
 
@@ -1004,6 +1012,12 @@ $('#generalNote').addEventListener('click', () => {
 // Init
 // We wrap the init sequence in an async function to wait for the map and config to load.
 async function initApp() {
+  // CRITICAL: Disable scan input until map is loaded
+  scanInput.disabled = true;
+  scanInput.placeholder = '⏳ Loading Part Number Map...';
+  scanInput.style.opacity = '0.5';
+  scanInput.style.cursor = 'not-allowed';
+
   // Load local preferences/data first
   loadPrefs();
   loadBatchComment();
@@ -1011,7 +1025,7 @@ async function initApp() {
   updateLock();
 
   // CRITICAL: Await the map and config fetch before populating dropdowns
-  await fetchPartNumberMap();
+  const mapLoaded = await fetchPartNumberMap();
 
   // Populate operator and station dropdowns from Google Sheet or fallback
   populateOperators();
@@ -1020,9 +1034,23 @@ async function initApp() {
   // Restore saved selections after population
   loadPrefs();
 
-  // You can now safely assume PART_NUMBER_MAP is loaded (or empty with a log message)
-  console.log('✅ Application Initialized. Config loaded.');
-  console.log(`📊 Part Number Map: ${Object.keys(PART_NUMBER_MAP).length} entries`);
+  // Enable scan input ONLY if map loaded successfully
+  if (mapLoaded) {
+    scanInput.disabled = false;
+    scanInput.placeholder = '✅ Ready to scan';
+    scanInput.style.opacity = '1';
+    scanInput.style.cursor = 'text';
+    scanInput.focus();
+    console.log('✅ Application Ready. Part Number Map loaded.');
+    console.log(`📊 Part Number Map: ${Object.keys(PART_NUMBER_MAP).length} entries`);
+  } else {
+    scanInput.placeholder = '❌ Map failed to load - REFRESH PAGE';
+    scanInput.style.opacity = '0.7';
+    scanInput.style.cursor = 'not-allowed';
+    console.error('❌ Application NOT READY. Part Number Map failed to load.');
+    show('❌ RELOAD PAGE - Map failed to load', 'err');
+  }
+
   console.log(`📊 Operators: ${OPERATORS_LIST.length > 0 ? OPERATORS_LIST.length : 'Using fallback'}`);
   console.log(`📊 Stations: ${STATIONS_LIST.length > 0 ? STATIONS_LIST.length : 'Using fallback'}`);
 }
